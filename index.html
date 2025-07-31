@@ -1,266 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bull vs Bear – Tap to Win</title>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
-    <style>
-      body {
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        user-select: none;
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Bull vs Bear</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding-top: env(safe-area-inset-top);
+      overflow: hidden;
+      user-select: none;
+      background-color: #000;
+    }
+    #game-container {
+      width: 100vw;
+      height: calc(100vh - env(safe-area-inset-top));
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container"></div>
+  <script>
+    // Telegram init
+    window.Telegram = window.Telegram || {};
+    Telegram.WebApp = Telegram.WebApp || {};
+    const tg = Telegram.WebApp;
+    tg.ready = tg.ready || function(){};
+    tg.MainButton = tg.MainButton || {};
+    tg.MainButton.setText = tg.MainButton.setText || function(){};
+    tg.MainButton.show = tg.MainButton.show || function(){};
+    tg.MainButton.hide = tg.MainButton.hide || function(){};
+    tg.MainButton.onClick = tg.MainButton.onClick || function(){};
+    tg.ready();
+
+    class GameScene extends Phaser.Scene {
+      constructor() {
+        super('GameScene');
       }
-      #game-container {
-        margin: 0 auto;
+
+      preload() {
+        this.load.image('bull', 'https://.../bull.png');
+        this.load.image('bear', 'https://.../bear.png');
+        this.load.image('hit', 'https://.../hit.png');
+        this.load.image('bg', 'https://.../background.png');
       }
-    </style>
-  </head>
-  <body>
-    <div id="game-container"></div>
-    <script>
-      class SplashScene extends Phaser.Scene {
-        constructor() {
-          super("SplashScene");
-        }
-        preload() {
-          this.load.image(
-            "splashBg",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/background-aq4p6NDDMOi4E77AauMbhb6guOZual.png?fhWn",
-          );
-          this.load.image(
-            "bullSplash",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/ChatGPT%20Image%2012%20%D0%B8%D1%8E%D0%BB.%202025%20%D0%B3.%2C%2002_05_31-Efi4v8ZklSvivzBBmTcSb10kVPTvit.png?VYKd",
-          );
-        }
-        create() {
-          this.add.image(180, 320, "splashBg").setDisplaySize(360, 640);
-          let bullSplashImage = this.add.image(180, 420, "bullSplash").setScale(0.35);
-          this.add.text(50, 100, "Bull vs Bear", {
-            fontSize: "36px",
-            fill: "#ffffff",
-            fontStyle: "bold",
-            stroke: "#000000",
-            strokeThickness: 2,
-          });
-          this.add.text(70, 150, "Tap to Win", {
-            fontSize: "36px",
-            fill: "#F7931A",
-            fontStyle: "bold",
-            stroke: "#000000",
-            strokeThickness: 2,
-          });
-          this.tweens.add({
-            targets: bullSplashImage,
-            y: "+=10",
-            yoyo: true,
-            repeat: -1,
-            ease: "Sine.inOut",
-            duration: 800,
-          });
-          this.input.once("pointerdown", () => {
-            this.scene.start("GameScene");
-          });
-          window.FarcadeSDK.singlePlayer.actions.ready();
+
+      create() {
+        this.add.image(180, 320, 'bg').setDisplaySize(360, 640);
+
+        this.score = 0;
+        this.bear = this.add.sprite(260, 420, 'bear').setScale(0.25);
+        this.bull = this.add.sprite(100, 420, 'bull').setScale(0.25);
+
+        this.scoreText = this.add.text(180, 40, 'Score: 0', { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+        this.input.on('pointerdown', this.handleTap, this);
+
+        // Telegram кнопка
+        tg.MainButton.setText("Играть снова");
+        tg.MainButton.onClick(() => {
+          tg.MainButton.hide();
+          this.scene.restart();
+        });
+
+        // Farcade ready
+        window.FarcadeSDK.singlePlayer.actions.ready();
+      }
+
+      handleTap() {
+        if (this.ended) return;
+        this.score++;
+        this.scoreText.setText('Score: ' + this.score);
+        this.tweens.timeline({
+          targets: this.bull,
+          tweens: [{ x: this.bear.x - 20, duration: 100 }, { x: 100, duration: 100 }]
+        });
+        const hit = this.add.image(this.bear.x, this.bear.y, 'hit').setScale(0.2);
+        this.tweens.add({ targets: hit, alpha: 0, duration: 200, onComplete: () => hit.destroy() });
+
+        if (this.score >= 20) {
+          this.endGame();
         }
       }
 
-      class GameScene extends Phaser.Scene {
-        constructor() {
-          super("GameScene");
-        }
-        preload() {
-          this.load.image(
-            "bull",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/bullg-EnvSydxxXTi983b6cGb2LxRel0RJbx.png?oVea",
-          );
-          this.load.image(
-            "bear",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/bearg-xIL449QaMWLD3BgQb7yhUZ95ZPIsbM.png?WqZH",
-          );
-          this.load.image(
-            "background",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/background-aq4p6NDDMOi4E77AauMbhb6guOZual.png?fhWn",
-          );
-          this.load.image(
-            "speedEffect",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/speed%20%282%29-vF6fAgmYYbe8pkYwtZGEh2KtuGsC6U.png?xLe7",
-          );
-          this.load.image(
-            "hitEffect",
-            "https://lqy3lriiybxcejon.public.blob.vercel-storage.com/c6471ffa-80b5-4a05-90f7-7d409c7ac587/hit-KrxUNvuNf9y9QXCd1vNTEK2IwxxGmd.png?dLZa",
-          );
-        }
-        create() {
-          this.add.image(180, 320, "background").setDisplaySize(360, 640);
-          this.level = 1;
-          this.totalPoints = 0;
-          this.levelText = this.add.text(10, 90, "Level: " + this.level, {
-            fontSize: "20px",
-            fill: "#FFD700",
-            fontStyle: "bold",
-          }); // Adjusted y to 90
-          this.pointsText = this.add.text(10, 120, "Points: " + this.totalPoints, {
-            fontSize: "20px",
-            fill: "#FFFFFF",
-            fontStyle: "bold",
-          }); // Adjusted y to 120
-          this.bear = this.add.sprite(260, 420, "bear").setScale(0.25).setDepth(0);
-          this.bull = this.add.sprite(100, 420, "bull").setScale(0.25).setDepth(1);
-          this.healthBarBackground = this.add.rectangle(180, 40, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
-          this.setupBearHealth();
-          this.healthBarFill = this.add.rectangle(180, 40, (this.currentHealth / this.maxHealth) * 200, 16, 0x00ff00);
-          this.bullBarBackground = this.add.rectangle(180, 600, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
-          this.setupBullHealth();
-          this.bullBarFill = this.add.rectangle(180, 600, (this.bullHealth / this.bullMaxHealth) * 200, 16, 0xff0000);
-          this.scoreText = this.add
-            .text(180, 80, "Score: 0", { fontSize: "24px", fill: "#fff", fontStyle: "bold" })
-            .setOrigin(0.5);
-          this.input.on("pointerdown", this.handleTap, this);
-          this.bearAttackEvent = this.time.addEvent({
-            delay: 3000 - this.level * 200,
-            callback: this.bearAttack,
-            callbackScope: this,
-            loop: true,
-          });
-          window.FarcadeSDK.on("play_again", () => {
-            this.totalPoints += this.tapCount;
-            this.level++;
-            this.pointsText.setText("Points: " + this.totalPoints);
-            this.levelText.setText("Level: " + this.level);
-            this.setupBearHealth();
-            this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
-            this.setupBullHealth();
-            this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
-            this.scoreText.setText("Score: 0");
-            this.tapCount = 0;
-            this.bull.x = 100;
-            this.bear.clearTint();
-            this.bear.setAlpha(1); // Reset alpha for bear
-            this.bull.setAlpha(1); // Reset alpha for bull
-            this.startTime = null;
-            this.gameOverCalled = false;
-            this.bearAttackEvent.reset({ delay: Math.max(1000, 3000 - this.level * 200) });
-            const lvlUpText = this.add
-              .text(180, 200, "Level " + this.level + "!", { fontSize: "32px", fill: "#FFD700", fontStyle: "bold" })
-              .setOrigin(0.5);
-            this.tweens.add({
-              targets: lvlUpText,
-              alpha: 0,
-              y: "-=50",
-              duration: 1000,
-              onComplete: () => lvlUpText.destroy(),
-            });
-          });
-          this.tapCount = 0;
-          this.lastTapTime = this.time.now;
-          this.startTime = null;
-          this.gameOverCalled = false;
-          this.input.once("pointerdown", () => {
-            this.startTime = this.time.now;
-          });
-          this.tweens.add({ targets: this.bull, y: "+=10", yoyo: true, repeat: -1, ease: "Sine.inOut", duration: 800 });
-        }
-        setupBearHealth() {
-          const baseMin = 80 + (this.level - 1) * 20;
-          const baseMax = 120 + (this.level - 1) * 20;
-          this.maxHealth = Phaser.Math.Between(baseMin, baseMax);
-          this.currentHealth = this.maxHealth;
-        }
-        setupBullHealth() {
-          this.bullMaxHealth = 100;
-          this.bullHealth = this.bullMaxHealth;
-        }
-        handleTap() {
-          if (this.gameOverCalled) return;
-          const now = this.time.now;
-          const tapsPerSecond = 1000 / (now - this.lastTapTime);
-          this.lastTapTime = now;
-          this.tapCount++;
-          this.scoreText.setText("Score: " + this.tapCount);
-          let reduction = Math.floor(this.tapCount / 50);
-          let fastDamage = Math.max(3, 10 - reduction);
-          let slowDamage = Math.max(1, 5 - reduction);
-          let damage = tapsPerSecond > 500 ? fastDamage : slowDamage;
-          damage += this.level - 1;
-          if (tapsPerSecond > 800) damage *= 2;
+      endGame() {
+        this.ended = true;
+        this.bull.setAlpha(0.5);
+        this.bear.setAlpha(0.5);
 
-          this.tweens.timeline({
-            targets: this.bull,
-            tweens: [
-              { x: this.bear.x - 20, duration: 150 },
-              { x: 100, duration: 150 },
-            ],
-            onStart: () => {
-              window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
-            },
-            onComplete: () => {
-              this.currentHealth = Phaser.Math.Clamp(this.currentHealth - damage, 0, this.maxHealth);
-              this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
-              const hitImage = this.add.image(this.bear.x, this.bear.y, "hitEffect").setScale(0.15).setDepth(3);
-              this.tweens.add({ targets: hitImage, alpha: 0, duration: 100, onComplete: () => hitImage.destroy() });
-              this.tweens.add({
-                targets: this.bear,
-                tint: 0xff0000,
-                duration: 100,
-                yoyo: true,
-                onComplete: () => this.bear.clearTint(),
-              });
-              if (this.currentHealth <= 0) this.roundOver();
-            },
-          });
-        }
-        bearAttack() {
-          if (this.gameOverCalled) return;
-          this.tweens.timeline({
-            targets: this.bear,
-            tweens: [
-              { x: this.bull.x + 20, duration: 150 },
-              { x: 260, duration: 150 },
-            ],
-            onStart: () => {
-              window.FarcadeSDK.singlePlayer.actions.hapticFeedback();
-            },
-            onComplete: () => {
-              let bearDamage = Phaser.Math.Between(5, 10) + (this.level - 1);
-              this.bullHealth = Phaser.Math.Clamp(this.bullHealth - bearDamage, 0, this.bullMaxHealth);
-              this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
-              const hitImage = this.add.image(this.bull.x, this.bull.y, "hitEffect").setScale(0.15).setDepth(3);
-              this.tweens.add({ targets: hitImage, alpha: 0, duration: 100, onComplete: () => hitImage.destroy() });
-              this.tweens.add({
-                targets: this.bull,
-                tint: 0xff0000,
-                duration: 100,
-                yoyo: true,
-                onComplete: () => this.bull.clearTint(),
-              });
-              if (this.bullHealth <= 0) this.roundOver(true);
-            },
-          });
-        }
-        roundOver(playerLost = false) {
-          this.gameOverCalled = true;
-          this.bearAttackEvent.remove();
-          this.tweens.add({ targets: this.bear, alpha: 0.5, duration: 300, yoyo: true, repeat: 2 });
-          this.tweens.add({ targets: this.bull, alpha: 0.5, duration: 300, yoyo: true, repeat: 2 });
-          this.time.delayedCall(1000, () => {
-            window.FarcadeSDK.singlePlayer.actions.gameOver({ score: this.tapCount });
-          });
+        this.time.delayedCall(1000, () => {
+          window.FarcadeSDK.singlePlayer.actions.gameOver({ score: this.score });
+        });
+
+        if (tg.MainButton) {
+          tg.MainButton.show();
         }
       }
-      const config = {
-        type: Phaser.AUTO,
-        width: 360,
-        height: 640,
-        parent: "game-container",
-        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-        scene: [SplashScene, GameScene],
-        physics: { default: "arcade", arcade: { debug: false } },
-      };
-      new Phaser.Game(config);
-    </script>
-  </body>
+    }
+
+    new Phaser.Game({
+      type: Phaser.AUTO,
+      width: 360,
+      height: 640,
+      parent: 'game-container',
+      scene: [GameScene],
+      scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+      }
+    });
+  </script>
+</body>
 </html>
