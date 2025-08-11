@@ -1,246 +1,384 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>Bull vs Bear – Tap to Win</title>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      padding-top: env(safe-area-inset-top);
-      overflow: hidden;
-      user-select: none;
-    }
-    #game-container {
-      width: 100vw;
-      height: calc(100vh - env(safe-area-inset-top));
-      margin: 0 auto;
-    }
-  </style>
-</head>
-<body>
-  <div id="game-container"></div>
-  <script>
-    // Telegram WebApp initialization
-    window.Telegram = window.Telegram || {};
-    Telegram.WebApp = Telegram.WebApp || {};
-    const tg = Telegram.WebApp;
-    tg.initData = tg.initData || location.search.replace('?', '');
-    tg.ready = tg.ready || function(){};
-    tg.MainButton = tg.MainButton || { setText: ()=>{}, show: ()=>{}, hide: ()=>{}, onClick: ()=>{} };
-    tg.ready();
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bull vs Bear – Tap to Win</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@farcade/game-sdk@latest/dist/index.min.js"></script>
+    <style>
+      body { margin: 0; padding: 0; overflow: hidden; user-select: none; background:#000; }
+      #game-container { margin: 0 auto; }
+      canvas { touch-action: manipulation; }
+    </style>
+  </head>
+  <body>
+    <div id="game-container"></div>
+    <script>
+      // --------- Utils: Rounded Button Texture ---------
+      function makeRoundedButtonTexture(scene, key, w, h, fillColor, strokeColor, radius = 12, strokeWidth = 2) {
+        const g = scene.make.graphics({ x: 0, y: 0, add: false });
+        g.fillStyle(fillColor, 1);
+        g.lineStyle(strokeWidth, strokeColor, 1);
 
-    class SplashScene extends Phaser.Scene {
-      constructor() { super('SplashScene'); }
-      preload() {
-        this.load.image('background', 'assets/background.png');
-        this.load.image('splashOverlay', 'assets/a.png');
-      }
-      create() {
-        // Full-screen background
-        this.add.image(180, 320, 'background').setDisplaySize(360, 640);
-        // Centered splash overlay slightly lower and larger
-        const overlay = this.add.image(180, 360, 'splashOverlay');
-        overlay.setScale(Math.min(360 / overlay.width, 640 / overlay.height) * 1.05);
+        // rounded rect path
+        const r = radius;
+        g.beginPath();
+        g.moveTo(r, 0);
+        g.lineTo(w - r, 0);
+        g.arc(w - r, r, r, -Math.PI/2, 0);
+        g.lineTo(w, h - r);
+        g.arc(w - r, h - r, r, 0, Math.PI/2);
+        g.lineTo(r, h);
+        g.arc(r, h - r, r, Math.PI/2, Math.PI);
+        g.lineTo(0, r);
+        g.arc(r, r, r, Math.PI, 1.5*Math.PI);
+        g.closePath();
+        g.fillPath();
+        g.strokePath();
 
-        // Title and subtitle
-        this.add.text(180, 120, 'Bull vs Bear', {
-          fontSize: '36px', fill: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3
-        }).setOrigin(0.5);
-        this.add.text(180, 180, 'Tap to Win', {
-          fontSize: '28px', fill: '#F7931A', fontStyle: 'bold', stroke: '#000000', strokeThickness: 2
-        }).setOrigin(0.5);
-
-        this.input.once('pointerdown', () => this.scene.start('GameScene'));
-        window.FarcadeSDK.singlePlayer.actions.ready();
-      }
-    }
-
-    class GameScene extends Phaser.Scene {
-      constructor() { super('GameScene'); }
-      preload() {
-        this.load.image('background', 'assets/background.png');
-        this.load.image('bull', 'assets/bull.png');
-        this.load.image('bear', 'assets/bear.png');
-        this.load.image('speedEffect', 'assets/speed.png');
-        this.load.image('hitEffect', 'assets/hit.png');
-      }
-      create() {
-        // Hide play again button initially
-        tg.MainButton.hide();
-        // Draw background
-        this.add.image(180, 320, 'background').setDisplaySize(360, 640);
-
-        // UI: level and points
-        this.level = 1;
-        this.totalPoints = 0;
-        this.levelText = this.add.text(10, 70, 'Level: ' + this.level, { fontSize: '20px', fill: '#FFD700' });
-        this.pointsText = this.add.text(10, 100, 'Points: ' + this.totalPoints, { fontSize: '20px', fill: '#FFFFFF' });
-
-        // Sprites
-        this.bear = this.add.sprite(260, 420, 'bear').setScale(0.25);
-        this.bull = this.add.sprite(100, 420, 'bull').setScale(0.25);
-
-        // Health bars
-        this.add.rectangle(180, 40, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
-        this.setupBearHealth();
-        this.healthBarFill = this.add.rectangle(180, 40, (this.currentHealth / this.maxHealth) * 200, 16, 0x00ff00);
-        this.add.rectangle(180, 600, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
-        this.setupBullHealth();
-        this.bullBarFill = this.add.rectangle(180, 600, (this.bullHealth / this.bullMaxHealth) * 200, 16, 0xff0000);
-
-        // Score
-        this.scoreText = this.add.text(180, 80, 'Score: 0', { fontSize: '24px', fill: '#FFFFFF' }).setOrigin(0.5);
-
-        // Input handling
-        this.input.on('pointerdown', this.handleTap, this);
-
-        // Bear attack timer
-        this.bearAttackEvent = this.time.addEvent({
-          delay: 3000 - this.level * 200,
-          callback: this.bearAttack,
-          callbackScope: this,
-          loop: true,
-        });
-
-        // Farcade play again
-        window.FarcadeSDK.on('play_again', () => this.restartRound());
-
-        // Initial state
-        this.tapCount = 0;
-        this.lastTapTime = this.time.now;
-        this.gameOverCalled = false;
+        g.generateTexture(key, w, h);
+        g.destroy();
       }
 
-      setupBearHealth() {
-        const min = 80 + (this.level - 1) * 20;
-        const max = 120 + (this.level - 1) * 20;
-        this.maxHealth = Phaser.Math.Between(min, max);
-        this.currentHealth = this.maxHealth;
+      class SplashScene extends Phaser.Scene {
+        constructor() { super("SplashScene"); }
+        preload() {
+          this.load.image("splashFull", "assets/a.png");
+          this.load.image("background", "assets/background.png");
+        }
+        create() {
+          // background
+          const bg = this.add.image(180, 320, "background").setDisplaySize(360, 640);
+
+          // centered splash image (smaller)
+          const img = this.add.image(180, 370, "splashFull").setOrigin(0.5);
+          // fit to ~70% ширины экрана
+          const targetW = 360 * 1;
+          const scale = targetW / img.width;
+          img.setScale(scale);
+
+          // title texts with stroke
+          const title = this.add.text(180, 120, "Bull vs Bear", {
+            fontSize: "42px",
+            fontStyle: "bold",
+            color: "#FFFFFF",
+            stroke: "#000000",
+            strokeThickness: 6,
+          }).setOrigin(0.5);
+
+          const subtitle = this.add.text(180, 170, "Tap to Win", {
+            fontSize: "36px",
+            fontStyle: "bold",
+            color: "#F7931A",
+            stroke: "#000000",
+            strokeThickness: 6,
+          }).setOrigin(0.5);
+
+          // gentle motion
+          this.tweens.add({
+            targets: img,
+            y: "+=10",
+            duration: 1600,
+            yoyo: true,
+            repeat: -1,
+            ease: "Sine.inOut",
+          });
+          this.tweens.add({
+            targets: [title, subtitle],
+            alpha: { from: 0.85, to: 1 },
+            duration: 1400,
+            yoyo: true,
+            repeat: -1,
+            ease: "Sine.inOut",
+          });
+
+          this.input.once("pointerdown", () => this.scene.start("GameScene"));
+          window.FarcadeSDK?.singlePlayer?.actions?.ready?.();
+        }
       }
 
-      setupBullHealth() {
-        this.bullMaxHealth = 100;
-        this.bullHealth = this.bullMaxHealth;
+      class GameScene extends Phaser.Scene {
+        constructor() { super("GameScene"); }
+
+        preload() {
+          this.load.image("bull", "assets/bull.png");
+          this.load.image("bear", "assets/bear.png");
+          this.load.image("background", "assets/background.png");
+          this.load.image("speedEffect", "assets/speed.png");
+          this.load.image("hitEffect", "assets/hit.png");
+        }
+
+        create() {
+          // background
+          this.add.image(180, 320, "background").setDisplaySize(360, 640);
+
+          // state
+          this.level = 1;
+          this.totalPoints = 0;
+
+          // UI texts
+          this.levelText = this.add.text(10, 90, "Level: " + this.level, {
+            fontSize: "20px", fill: "#FFD700", fontStyle: "bold",
+          });
+          this.pointsText = this.add.text(10, 120, "Points: " + this.totalPoints, {
+            fontSize: "20px", fill: "#FFFFFF", fontStyle: "bold",
+          });
+          this.scoreText = this.add.text(180, 80, "Score: 0", {
+            fontSize: "24px", fill: "#fff", fontStyle: "bold",
+            stroke: "#000", strokeThickness: 3
+          }).setOrigin(0.5);
+
+          // sprites
+          this.bear = this.add.sprite(260, 420, "bear").setScale(0.25).setDepth(0);
+          this.bull = this.add.sprite(100, 420, "bull").setScale(0.25).setDepth(1);
+
+          // HP bars
+          this.healthBarBackground = this.add.rectangle(180, 40, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
+          this.setupBearHealth();
+          this.healthBarFill = this.add.rectangle(180, 40, (this.currentHealth / this.maxHealth) * 200, 16, 0x00ff00);
+
+          this.bullBarBackground = this.add.rectangle(180, 600, 210, 20, 0x333333).setStrokeStyle(2, 0x000000);
+          this.setupBullHealth();
+          this.bullBarFill = this.add.rectangle(180, 600, (this.bullHealth / this.bullMaxHealth) * 200, 16, 0xff0000);
+
+          // hit effect pool
+          this.hitPool = this.add.group({ classType: Phaser.GameObjects.Image, maxSize: 16, runChildUpdate: false });
+          for (let i = 0; i < 8; i++) {
+            const h = this.add.image(-1000, -1000, "hitEffect").setScale(0.15).setDepth(3);
+            h.setActive(false).setVisible(false);
+            this.hitPool.add(h);
+          }
+
+          // input & motion
+          this.tapCount = 0;
+          this.lastTapTime = this.time.now;
+          this.startTime = null;
+          this.gameOverCalled = false;
+
+          this.tweens.add({ targets: this.bull, y: "+=10", yoyo: true, repeat: -1, ease: "Sine.inOut", duration: 800 });
+          this.input.on("pointerdown", this.handleTap, this);
+          this.input.once("pointerdown", () => { this.startTime = this.time.now; });
+
+          // bear attacks ~1.5s with level-based speedup
+          this.bearAttackEvent = this.time.addEvent({
+            delay: this.getBearDelay(),
+            callback: this.bearAttack,
+            callbackScope: this,
+            loop: true,
+          });
+
+          // Play Again button (hidden until round end)
+          this.playAgainBtn = this.createPlayAgainButton();
+          this.hidePlayAgainButton();
+
+          // Farcade play_again hook
+          window.FarcadeSDK?.on?.("play_again", () => this.nextRound());
+        }
+
+        // ——— helpers ———
+        getBearDelay() {
+          return Math.max(700, 1500 - (this.level - 1) * 120);
+        }
+
+        setupBearHealth() {
+          const baseMin = 80 + (this.level - 1) * 20;
+          const baseMax = 120 + (this.level - 1) * 20;
+          this.maxHealth = Phaser.Math.Between(baseMin, baseMax);
+          this.currentHealth = this.maxHealth;
+        }
+
+        setupBullHealth() {
+          this.bullMaxHealth = 100;
+          this.bullHealth = this.bullMaxHealth;
+        }
+
+        // ——— nicer Play Again button ———
+        createPlayAgainButton() {
+          const w = 240, h = 56;
+          // base & hover textures
+          const ORANGE = 0xF7931A;
+          const ORANGE_DARK = 0xD9780E;
+          const WHITE = 0xFFFFFF;
+
+          makeRoundedButtonTexture(this, "btn_orange", w, h, ORANGE, WHITE, 14, 2);
+          makeRoundedButtonTexture(this, "btn_orange_hover", w, h, ORANGE_DARK, WHITE, 14, 2);
+
+          const container = this.add.container(180, 320).setDepth(10);
+          const img = this.add.image(0, 0, "btn_orange");
+          const label = this.add.text(0, 0, "Играть снова", {
+            fontSize: "22px", fontStyle: "bold", color: "#ffffff",
+            stroke: "#000000", strokeThickness: 3,
+          }).setOrigin(0.5);
+
+          img.setInteractive({ useHandCursor: true });
+
+          img.on("pointerover", () => img.setTexture("btn_orange_hover"));
+          img.on("pointerout",  () => img.setTexture("btn_orange"));
+          img.on("pointerdown", () => {
+            this.tweens.add({ targets: container, scale: 0.96, duration: 60, yoyo: true });
+            this.nextRound();
+          });
+
+          // subtle drop shadow effect via tweened alpha duplicate (optional)
+          const shadow = this.add.image(2, 4, "btn_orange").setTint(0x000000).setAlpha(0.25);
+          container.add([shadow, img, label]);
+
+          return container;
+        }
+
+        showPlayAgainButton() {
+          this.playAgainBtn.setVisible(true).setAlpha(0);
+          this.tweens.add({ targets: this.playAgainBtn, alpha: 1, duration: 200 });
+        }
+        hidePlayAgainButton() { this.playAgainBtn.setVisible(false); }
+
+        // ——— gameplay ———
+        handleTap() {
+          if (this.gameOverCalled) return;
+          const now = this.time.now;
+          const tps = 1000 / (now - this.lastTapTime);
+          this.lastTapTime = now;
+
+          this.tapCount++;
+          this.scoreText.setText("Score: " + this.tapCount);
+
+          let reduction = Math.floor(this.tapCount / 50);
+          let fastDamage = Math.max(3, 10 - reduction);
+          let slowDamage = Math.max(1, 5 - reduction);
+          let damage = tps > 500 ? fastDamage : slowDamage;
+          damage += this.level - 1;
+          if (tps > 800) damage *= 2;
+
+          this.tweens.timeline({
+            targets: this.bull,
+            tweens: [{ x: this.bear.x - 20, duration: 150 }, { x: 100, duration: 150 }],
+            onStart: () => window.FarcadeSDK?.singlePlayer?.actions?.hapticFeedback?.(),
+            onComplete: () => {
+              this.currentHealth = Phaser.Math.Clamp(this.currentHealth - damage, 0, this.maxHealth);
+              this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
+
+              this.spawnHit(this.bear.x, this.bear.y);
+
+              this.tweens.add({
+                targets: this.bear, tint: 0xff0000, duration: 100, yoyo: true,
+                onComplete: () => this.bear.clearTint(),
+              });
+
+              if (this.currentHealth <= 0) this.roundOver(false);
+            },
+          });
+        }
+
+        bearAttack() {
+          if (this.gameOverCalled) return;
+
+          this.tweens.timeline({
+            targets: this.bear,
+            tweens: [{ x: this.bull.x + 20, duration: 150 }, { x: 260, duration: 150 }],
+            onStart: () => window.FarcadeSDK?.singlePlayer?.actions?.hapticFeedback?.(),
+            onComplete: () => {
+              let bearDamage = Phaser.Math.Between(5, 10) + (this.level - 1);
+              this.bullHealth = Phaser.Math.Clamp(this.bullHealth - bearDamage, 0, this.bullMaxHealth);
+              this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
+
+              this.spawnHit(this.bull.x, this.bull.y);
+
+              this.tweens.add({
+                targets: this.bull, tint: 0xff0000, duration: 100, yoyo: true,
+                onComplete: () => this.bull.clearTint(),
+              });
+
+              if (this.bullHealth <= 0) this.roundOver(true);
+            },
+          });
+        }
+
+        // pooled hit effect
+        spawnHit(x, y) {
+          let hit = this.hitPool.getFirstDead(false);
+          if (!hit) {
+            hit = this.add.image(-1000, -1000, "hitEffect").setScale(0.15).setDepth(3);
+            this.hitPool.add(hit);
+          }
+          hit.setPosition(x, y).setAlpha(1).setActive(true).setVisible(true);
+
+          this.tweens.add({
+            targets: hit, alpha: 0, duration: 120,
+            onComplete: () => {
+              hit.setActive(false).setVisible(false).setPosition(-1000, -1000);
+            },
+          });
+        }
+
+        roundOver(playerLost = false) {
+          if (this.gameOverCalled) return;
+          this.gameOverCalled = true;
+
+          this.bearAttackEvent?.remove();
+
+          this.tweens.add({ targets: this.bear, alpha: 0.5, duration: 300, yoyo: true, repeat: 2 });
+          this.tweens.add({ targets: this.bull, alpha: 0.5, duration: 300, yoyo: true, repeat: 2 });
+
+          this.showPlayAgainButton();
+
+          this.time.delayedCall(600, () => {
+            window.FarcadeSDK?.singlePlayer?.actions?.gameOver?.({ score: this.tapCount });
+          });
+        }
+
+        nextRound() {
+          this.totalPoints += this.tapCount;
+          this.level++;
+
+          this.pointsText.setText("Points: " + this.totalPoints);
+          this.levelText.setText("Level: " + this.level);
+
+          this.setupBearHealth();
+          this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
+          this.setupBullHealth();
+          this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
+
+          this.tapCount = 0;
+          this.scoreText.setText("Score: 0");
+          this.bull.x = 100;
+          this.bear.clearTint(); this.bear.setAlpha(1);
+          this.bull.setAlpha(1);
+
+          this.startTime = null;
+          this.gameOverCalled = false;
+
+          this.bearAttackEvent = this.time.addEvent({
+            delay: this.getBearDelay(),
+            callback: this.bearAttack,
+            callbackScope: this,
+            loop: true,
+          });
+
+          const lvlUpText = this.add.text(180, 200, "Level " + this.level + "!", {
+            fontSize: "32px", fill: "#FFD700", fontStyle: "bold",
+            stroke: "#000", strokeThickness: 4
+          }).setOrigin(0.5);
+          this.tweens.add({
+            targets: lvlUpText, alpha: 0, y: "-=50", duration: 1000,
+            onComplete: () => lvlUpText.destroy(),
+          });
+
+          this.hidePlayAgainButton();
+        }
       }
 
-      handleTap() {
-        if (this.gameOverCalled) return;
-        const now = this.time.now;
-        const tapsPS = 1000 / (now - this.lastTapTime);
-        this.lastTapTime = now;
-        this.tapCount++;
-        this.scoreText.setText('Score: ' + this.tapCount);
-
-        let reduction = Math.floor(this.tapCount / 50);
-        let damage =
-          (tapsPS > 500 ? Math.max(3, 10 - reduction) : Math.max(1, 5 - reduction)) +
-          (this.level - 1);
-        if (tapsPS > 800) damage *= 2;
-
-        this.currentHealth = Phaser.Math.Clamp(this.currentHealth - damage, 0, this.maxHealth);
-        this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
-
-        // Bull attack animation
-        this.tweens.timeline({
-          targets: this.bull,
-          tweens: [
-            { x: this.bear.x - 20, duration: 100 },
-            { x: 100, duration: 100 },
-          ],
-        });
-
-        // Hit effect
-        const hit = this.add.image(this.bear.x, this.bear.y, 'hitEffect').setScale(0.15);
-        this.tweens.add({ targets: hit, alpha: 0, duration: 200, onComplete: () => hit.destroy() });
-
-        // Bear tint on hit (blink)
-        this.tweens.add({
-          targets: this.bear,
-          tint: 0xff0000,
-          duration: 100,
-          yoyo: true,
-          onComplete: () => this.bear.clearTint(),
-        });
-
-        if (this.currentHealth <= 0) this.roundOver();
-      }
-
-      bearAttack() {
-        if (this.gameOverCalled) return;
-        this.tweens.timeline({
-          targets: this.bear,
-          tweens: [
-            { x: this.bull.x + 20, duration: 150 },
-            { x: 260, duration: 150 },
-          ],
-        });
-        let bd = Phaser.Math.Between(5, 10) + (this.level - 1);
-        this.bullHealth = Phaser.Math.Clamp(this.bullHealth - bd, 0, this.bullMaxHealth);
-        this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
-        this.tweens.add({
-          targets: this.bull,
-          tint: 0xff0000,
-          duration: 200,
-          yoyo: true,
-          onComplete: () => this.bull.clearTint(),
-        });
-
-        if (this.bullHealth <= 0) this.roundOver(true);
-      }
-
-      roundOver(playerLost = false) {
-        this.gameOverCalled = true;
-        this.bearAttackEvent.remove();
-        [this.bear, this.bull].forEach((s) =>
-          this.tweens.add({ targets: s, alpha: 0.5, duration: 300, yoyo: true, repeat: 2 })
-        );
-
-        tg.MainButton.setText('Играть снова');
-        tg.MainButton.show();
-        tg.MainButton.onClick(() => {
-          tg.MainButton.hide();
-          this.restartRound();
-        });
-
-        this.time.delayedCall(1000, () =>
-          window.FarcadeSDK.singlePlayer.actions.gameOver({ score: this.tapCount })
-        );
-      }
-
-      restartRound() {
-        this.totalPoints += this.tapCount;
-        this.level++;
-        this.pointsText.setText('Points: ' + this.totalPoints);
-        this.levelText.setText('Level: ' + this.level);
-
-        this.setupBearHealth();
-        this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
-        this.setupBullHealth();
-        this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
-
-        this.tapCount = 0;
-        this.lastTapTime = this.time.now;
-        this.gameOverCalled = false;
-        this.scoreText.setText('Score: 0');
-        this.bull.x = 100;
-        this.bear.clearTint();
-
-        this.bearAttackEvent.reset({ delay: Math.max(1000, 3000 - this.level * 200) });
-      }
-    }
-
-    new Phaser.Game({
-      type: Phaser.AUTO,
-      width: 360,
-      height: 640,
-      parent: 'game-container',
-      scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      scene: [SplashScene, GameScene],
-    });
-  </script>
-</body>
+      const config = {
+        type: Phaser.AUTO,
+        width: 360,
+        height: 640,
+        parent: "game-container",
+        scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+        scene: [SplashScene, GameScene],
+        physics: { default: "arcade", arcade: { debug: false } },
+      };
+      new Phaser.Game(config);
+    </script>
+  </body>
 </html>
