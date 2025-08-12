@@ -50,7 +50,11 @@
         }
         create() {
           // background
-          const bg = this.add.image(180, 320, "background").setDisplaySize(360, 640);
+          const bg = this.add.image(180, 320, "background").setOrigin(0.5);
+          const scale = Math.max(360 / bg.width, 640 / bg.height);
+          bg.setScale(scale * 1.02); // запас, чтобы не было рамок
+          this.cameras.main.setRoundPixels(true);
+
 
           // centered splash image (smaller)
           const img = this.add.image(180, 370, "splashFull").setOrigin(0.5);
