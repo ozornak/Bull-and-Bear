@@ -41,9 +41,43 @@
         g.destroy();
       }
 
+      // ========= ЗАГРУЗКА (⏳) =========
+      class LoadingScene extends Phaser.Scene {
+        constructor(){ super("LoadingScene"); }
+        preload(){
+          const cx = 180, cy = 320;
+
+          // Фон (чтобы не был просто чёрный экран)
+          this.cameras.main.setBackgroundColor("#000");
+
+          // Иконка ⏳ и подпись
+          const hourglass = this.add.text(cx, cy - 10, "⏳", { fontSize: "48px", color: "#FFFFFF" }).setOrigin(0.5);
+          const label = this.add.text(cx, cy + 30, "Loading...", { fontSize: "18px", color: "#FFFFFF" }).setOrigin(0.5);
+
+          // Прогресс-бар
+          const box = this.add.rectangle(cx, cy + 70, 240, 16, 0x222222).setStrokeStyle(2, 0x555555).setOrigin(0.5);
+          const bar = this.add.rectangle(cx - 120, cy + 70, 1, 12, 0xF7931A).setOrigin(0, 0.5);
+
+          // Анимация «покачивания» песочных часов
+          this.tweens.add({ targets: hourglass, angle: { from: -6, to: 6 }, duration: 700, yoyo: true, repeat: -1, ease: "Sine.inOut" });
+
+          this.load.on("progress", (v) => { bar.width = Math.max(1, 240 * v); });
+          this.load.on("complete", () => { /* сразу в заставку */ this.scene.start("SplashScene"); });
+
+          // Грузим все ассеты заранее (ключи такие же, как в сценах)
+          this.load.image("splashFull", "assets/a.png");
+          this.load.image("background", "assets/background.png");
+          this.load.image("bull", "assets/bull.png");
+          this.load.image("bear", "assets/bear.png");
+          this.load.image("speedEffect", "assets/speed.png");
+          this.load.image("hitEffect", "assets/hit.png");
+        }
+      }
+
       class SplashScene extends Phaser.Scene {
         constructor() { super("SplashScene"); }
         preload() {
+          // Дублирующая загрузка не обязательна, но не мешает — всё уже будет в кеше.
           this.load.image("splashFull", "assets/a.png");
           this.load.image("background", "assets/background.png");
         }
@@ -329,40 +363,32 @@
         }
 
         nextRound() {
-          // если победил — идём дальше и начисляем очки;
-          // если проиграл — остаёмся на том же уровне и не начисляем totalPoints
           if (this.roundOutcome === 'win') {
             this.totalPoints += this.tapCount;
             this.level++;
           }
 
-          // UI
           this.pointsText.setText("Points: " + this.totalPoints);
           this.levelText.setText("Level: " + this.level);
 
-          // восстановить HP
           this.setupBearHealth();
           this.healthBarFill.width = (this.currentHealth / this.maxHealth) * 200;
           this.setupBullHealth();
           this.bullBarFill.width = (this.bullHealth / this.bullMaxHealth) * 200;
 
-          // сброс счёта и позиций
           this.tapCount = 0;
           this.scoreText.setText("Score: 0");
           this.bull.x = 100;
           this.bear.clearTint(); this.bear.setAlpha(1);
           this.bull.setAlpha(1);
 
-          // спрятать исход и кнопку
           if (this.outcomeText) { this.outcomeText.destroy(); this.outcomeText = null; }
           this.hidePlayAgainButton();
 
-          // флаги
           this.startTime = null;
           this.gameOverCalled = false;
           this.roundOutcome = null;
 
-          // заново атаки с обновлённой задержкой
           this.bearAttackEvent = this.time.addEvent({
             delay: this.getBearDelay(),
             callback: this.bearAttack,
@@ -370,17 +396,11 @@
             loop: true,
           });
 
-          // всплывашка "Level N!" только при победе
-          if (this.levelText && this.roundOutcome !== 'lose') {
-            const lvlUpText = this.add.text(180, 200, "Level " + this.level + "!", {
-              fontSize: "32px", fill: "#FFD700", fontStyle: "bold",
-              stroke: "#000", strokeThickness: 4
-            }).setOrigin(0.5);
-            this.tweens.add({
-              targets: lvlUpText, alpha: 0, y: "-=50", duration: 1000,
-              onComplete: () => lvlUpText.destroy(),
-            });
-          }
+          const lvlUpText = this.add.text(180, 200, "Level " + this.level + "!", {
+            fontSize: "32px", fill: "#FFD700", fontStyle: "bold",
+            stroke: "#000", strokeThickness: 4
+          }).setOrigin(0.5);
+          this.tweens.add({ targets: lvlUpText, alpha: 0, y: "-=50", duration: 1000, onComplete: () => lvlUpText.destroy() });
         }
       }
 
@@ -390,7 +410,7 @@
         height: 640,
         parent: "game-container",
         scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-        scene: [SplashScene, GameScene],
+        scene: [LoadingScene, SplashScene, GameScene], // ⏳ загрузка добавлена первой
         physics: { default: "arcade", arcade: { debug: false } },
       };
       new Phaser.Game(config);
